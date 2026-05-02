@@ -135,7 +135,7 @@
     }
 
     // --- Sidebar Navigation ---
-    const Sidebar = ({ savedSkills, onCreateManual, onReviewSaved, onRunSkill, onDeleteSkill }) => {
+    const Sidebar = ({ savedSkills, onCreateManual, onReviewSaved, onRunSkill, onDeleteSkill, onOpenSettings }) => {
       return (
         <div className="w-64 bg-[#1A1A1A] border-r border-[#2D2D2D] flex flex-col h-full overflow-y-auto shrink-0">
           <div className="p-4 border-b border-[#2D2D2D]">
@@ -170,7 +170,7 @@
           </div>
 
           <div className="p-4 border-t border-[#2D2D2D]">
-            <button className="w-full text-left p-2 rounded-lg text-[13px] text-[#A0A0A0] hover:text-white hover:bg-[#2D2D2D] transition-all">
+            <button onClick={onOpenSettings} className="w-full text-left p-2 rounded-lg text-[13px] text-[#A0A0A0] hover:text-white hover:bg-[#2D2D2D] transition-all">
               ⚙️ Settings
             </button>
           </div>
@@ -343,28 +343,67 @@
       );
     };
 
+    const SettingsEditor = ({ apiKey, onSave, onClose }) => {
+      const [tempKey, setTempKey] = useState(apiKey === "YOUR_GROQ_API_KEY" ? "" : apiKey);
+      return (
+        <div className="p-6 h-full flex flex-col">
+          <div className="flex justify-between items-center mb-6 border-b border-[#2D2D2D] pb-4">
+            <h2 className="text-[20px] font-semibold m-0 text-white">Settings</h2>
+            <button onClick={onClose} className="text-[#A0A0A0] hover:text-white">✕</button>
+          </div>
+          <div className="flex-1 space-y-6">
+            <div>
+              <label className="block text-[12px] text-[#A0A0A0] uppercase mb-1">Groq API Key</label>
+              <input 
+                type="password" 
+                value={tempKey} 
+                onChange={e => setTempKey(e.target.value)} 
+                className="w-full bg-[#1A1A1A] border border-[#3A3A3A] text-white p-2 rounded-lg outline-none focus:border-[#FF6B35]" 
+                placeholder="gsk_..." 
+              />
+              <p className="text-[11px] text-[#555] mt-2 italic">Your key is stored locally in your browser and never sent to our servers.</p>
+            </div>
+          </div>
+          <div className="pt-4 border-t border-[#2D2D2D]">
+            <button 
+              onClick={() => onSave(tempKey)} 
+              className="w-full bg-[#FF6B35] hover:bg-[#FF7D4D] text-white py-3 rounded-lg font-semibold transition-colors"
+            >
+              Save Configuration
+            </button>
+          </div>
+        </div>
+      );
+    };
+
     // --- Main App Layout ---
     const App = () => {
-      const apiKey = "YOUR_GROQ_API_KEY";
+      const [apiKey, setApiKey] = useState(localStorage.getItem('GROQ_API_KEY') || "YOUR_GROQ_API_KEY");
       const [messages, setMessages] = useState([{ role: 'assistant', content: 'Hello! I am your Decision Guidance layer workspace.' }]);
       const [input, setInput] = useState("");
       const [loading, setLoading] = useState(false);
       
       // Right Panel State
-      const [panel, setPanel] = useState({ isOpen: false, view: null, type: null, data: null }); // view: 'preview' | 'edit'
+      const [panel, setPanel] = useState({ isOpen: false, view: null, type: null, data: null }); // view: 'preview' | 'edit' | 'settings'
 
       // Capabilities State
       const [savedSkills, setSavedSkills] = useState([]);
 
       const messagesEndRef = useRef(null);
       const executionCountRef = useRef(0);
-      const groqClient = new GroqClient(apiKey);
+      
+      // Memoize client to update when apiKey changes
+      const groqClient = React.useMemo(() => new GroqClient(apiKey), [apiKey]);
 
       const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       useEffect(() => { scrollToBottom(); }, [messages]);
 
       const handleSend = async () => {
         if (!input.trim()) return;
+        if (apiKey === "YOUR_GROQ_API_KEY" || !apiKey) {
+          setMessages(prev => [...prev, { role: 'assistant', content: "⚠️ Groq API Key is missing. Please go to Settings to configure it." }]);
+          return;
+        }
         const userMsg = input.trim();
         setInput("");
         setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
@@ -486,7 +525,17 @@
         });
       };
 
+      const handleSaveSettings = (newKey) => {
+        setApiKey(newKey);
+        localStorage.setItem('GROQ_API_KEY', newKey);
+        setPanel({ isOpen: false, view: null, type: null, data: null });
+      };
+
       const handleRunSkill = async (skill, isRegen = false, msgIndex = -1) => {
+        if (apiKey === "YOUR_GROQ_API_KEY" || !apiKey) {
+          setMessages(prev => [...prev, { role: 'assistant', content: "⚠️ Groq API Key is missing. Please go to Settings to configure it." }]);
+          return;
+        }
         setLoading(true);
         
         let userContext = "";
@@ -535,6 +584,7 @@
             onReviewSaved={handleReviewSaved}
             onRunSkill={handleRunSkill}
             onDeleteSkill={handleDeleteSkill}
+            onOpenSettings={() => setPanel({ isOpen: true, view: 'settings', type: null, data: null })}
           />
           
           {/* Main Chat Area */}
@@ -578,6 +628,7 @@
             <div className="w-96 bg-[#1A1A1A] border-l border-[#2D2D2D] shrink-0 h-full shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-20 transition-all duration-300">
               {panel.view === 'preview' && <WorkflowPreview data={panel.data} onClose={() => setPanel({...panel, isOpen: false})} onEdit={(data) => setPanel({...panel, view: 'edit', data})} />}
               {panel.view === 'edit' && <CapabilityEditor type={panel.type} data={panel.data} onClose={() => setPanel({...panel, isOpen: false})} onSave={handleSaveCapability} client={groqClient} />}
+              {panel.view === 'settings' && <SettingsEditor apiKey={apiKey} onClose={() => setPanel({...panel, isOpen: false})} onSave={handleSaveSettings} />}
             </div>
           )}
         </div>
