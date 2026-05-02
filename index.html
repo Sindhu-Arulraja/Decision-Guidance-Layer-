@@ -400,8 +400,9 @@
 
       const handleSend = async () => {
         if (!input.trim()) return;
-        if (apiKey === "YOUR_GROQ_API_KEY" || !apiKey) {
-          setMessages(prev => [...prev, { role: 'assistant', content: "⚠️ Groq API Key is missing. Please go to Settings to configure it." }]);
+        if (!apiKey || apiKey === "YOUR_GROQ_API_KEY" || apiKey.trim() === "") {
+          console.warn("[App] API Key is missing or invalid:", apiKey);
+          setMessages(prev => [...prev, { role: 'assistant', content: "⚠️ Groq API Key is missing. Please click the Gear icon ⚙️ in the bottom left to configure it." }]);
           return;
         }
         const userMsg = input.trim();
@@ -526,14 +527,19 @@
       };
 
       const handleSaveSettings = (newKey) => {
-        setApiKey(newKey);
-        localStorage.setItem('GROQ_API_KEY', newKey);
+        const trimmedKey = (newKey || "").trim();
+        console.log("[App] Saving API Key:", trimmedKey ? "Key provided" : "Empty key");
+        setApiKey(trimmedKey);
+        localStorage.setItem('GROQ_API_KEY', trimmedKey);
         setPanel({ isOpen: false, view: null, type: null, data: null });
+        if (trimmedKey) {
+          setMessages(prev => [...prev, { role: 'assistant', content: "✅ API Key saved successfully. You can now start chatting!" }]);
+        }
       };
 
       const handleRunSkill = async (skill, isRegen = false, msgIndex = -1) => {
-        if (apiKey === "YOUR_GROQ_API_KEY" || !apiKey) {
-          setMessages(prev => [...prev, { role: 'assistant', content: "⚠️ Groq API Key is missing. Please go to Settings to configure it." }]);
+        if (!apiKey || apiKey === "YOUR_GROQ_API_KEY" || apiKey.trim() === "") {
+          setMessages(prev => [...prev, { role: 'assistant', content: "⚠️ Groq API Key is missing. Please click the Gear icon ⚙️ in the bottom left to configure it." }]);
           return;
         }
         setLoading(true);
